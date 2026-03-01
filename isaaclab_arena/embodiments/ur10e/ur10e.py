@@ -51,6 +51,22 @@ _UR10E_CFG.actuators["elbow"].damping = 60.0
 _UR10E_CFG.actuators["wrist"].stiffness = 500.0
 _UR10E_CFG.actuators["wrist"].damping = 40.0
 
+_UR10E_CFG.actuators["shoulder"].velocity_limit_sim = 2.0
+_UR10E_CFG.actuators["elbow"].velocity_limit_sim = 2.5
+_UR10E_CFG.actuators["wrist"].velocity_limit_sim = 3.0
+
+_UR10E_CFG.actuators["gripper_drive"].stiffness = 2000.0
+_UR10E_CFG.actuators["gripper_drive"].damping = 100.0
+_UR10E_CFG.actuators["gripper_drive"].effort_limit_sim = 200.0
+_UR10E_CFG.actuators["gripper_drive"].velocity_limit_sim = 10.0
+
+_UR10E_CFG.actuators["gripper_finger"].stiffness = 100.0
+_UR10E_CFG.actuators["gripper_finger"].damping = 10.0
+_UR10E_CFG.actuators["gripper_finger"].effort_limit_sim = 50.0
+_UR10E_CFG.actuators["gripper_finger"].velocity_limit_sim = 10.0
+
+_UR10E_CFG.actuators["gripper_passive"].velocity_limit_sim = 10.0
+
 
 @register_asset
 class UR10eEmbodiment(EmbodimentBase):
@@ -160,7 +176,7 @@ class UR10eActionsCfg:
         ],
         body_name="wrist_3_link",
         controller=DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls"),
-        scale=0.5,
+        scale=0.1,
         body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=(0.0, 0.0, 0.24)),
     )
 
@@ -232,20 +248,19 @@ class UR10eEventCfg:
 
     # Default joint pose for UR10E + Robotiq 2F-140 gripper
     # 6 arm joints + 8 gripper joints = 14 total
-    # Using the same joint config as the working UR10 suction gripper stack task:
-    #   (0, -π/2, π/2, -π/2, -π/2, 0)
-    # This creates a COMPACT arm configuration. The tool initially points UP,
-    # but the RL agent learns to reorient it during training (same as UR10 stack does).
+    # Arm extends forward with gripper oriented DOWNWARD toward the table,
+    # ready for top-down manipulation. This avoids the lateral sweep that
+    # occurs when starting from a compact/tool-up configuration.
     init_ur10e_arm_pose = EventTerm(
         func=franka_stack_events.set_default_joint_pose,
         mode="reset",
         params={
             "default_pose": [
                 0.0,          # shoulder_pan_joint (face +X toward table/cube)
-                -1.5708,      # shoulder_lift_joint (upper arm horizontal)
-                1.5708,       # elbow_joint (forearm bends, compact config)
-                -1.5708,      # wrist_1_joint
-                -1.5708,      # wrist_2_joint
+                -2.3562,      # shoulder_lift_joint (-3π/4, upper arm angled ~45° below horizontal)
+                1.5708,       # elbow_joint (π/2 forearm bend brings wrist toward table)
+                -0.7854,      # wrist_1_joint (-π/4, orients gripper downward)
+                -1.5708,      # wrist_2_joint (-π/2)
                 0.0,          # wrist_3_joint
                 0.0,          # finger_joint (Robotiq open)
                 0.0,          # right_outer_knuckle_joint
@@ -273,9 +288,23 @@ class UR10eEventCfg:
 class UR10eRewardsCfg:
     """Reward specifications for the MDP."""
 
-    action_rate = RewardTermCfg(func=mdp_isaac_lab.action_rate_l2, weight=-0.0001)
+    action_rate = RewardTermCfg(func=mdp_isaac_lab.action_rate_l2, weight=-0.001)
     joint_vel = RewardTermCfg(
-        func=mdp_isaac_lab.joint_vel_l2, weight=-0.0001, params={"asset_cfg": SceneEntityCfg("robot")}
+        func=mdp_isaac_lab.joint_vel_l2,
+        weight=-0.02,
+        params={
+            "asset_cfg": SceneEntityCfg(
+                "robot",
+                joint_names=[
+                    "shoulder_pan_joint",
+                    "shoulder_lift_joint",
+                    "elbow_joint",
+                    "wrist_1_joint",
+                    "wrist_2_joint",
+                    "wrist_3_joint",
+                ],
+            )
+        },
     )
 
 

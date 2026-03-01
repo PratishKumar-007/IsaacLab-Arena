@@ -25,7 +25,10 @@ class LiftObjectEnvironment(ExampleEnvironmentBase):
         from isaaclab_arena.utils.pose import Pose
 
         background = self.asset_registry.get_asset_by_name("table")()
-        pick_up_object = self.asset_registry.get_asset_by_name(args_cli.object)()
+        object_kwargs = {}
+        if args_cli.embodiment == "ur10e":
+            object_kwargs["scale"] = (1.0, 1.0, 1.0)
+        pick_up_object = self.asset_registry.get_asset_by_name(args_cli.object)(**object_kwargs)
 
         # Add ground plane and light to the scene
         ground_plane = self.asset_registry.get_asset_by_name("ground_plane")()
@@ -49,12 +52,13 @@ class LiftObjectEnvironment(ExampleEnvironmentBase):
         # If using for an IL task, add the goal position as a marker to the scene
         scene = Scene(assets=assets)
 
+        episode_length = 8.0 if args_cli.embodiment == "ur10e" else 5.0
         task = LiftObjectTaskRL(
             pick_up_object,
             background,
             embodiment,
             minimum_height_to_lift=0.04,
-            episode_length_s=5.0,
+            episode_length_s=episode_length,
             rl_training_mode=args_cli.rl_training_mode,
         )
 

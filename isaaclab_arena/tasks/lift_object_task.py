@@ -305,6 +305,9 @@ class LiftObjectRewardCfg:
     """Reward terms for the Lift Object task."""
 
     reaching_object: RewardTermCfg = MISSING
+    approach_above: RewardTermCfg = MISSING
+    fingertips_grasp: RewardTermCfg = MISSING
+    close_gripper: RewardTermCfg = MISSING
     lifting_object: RewardTermCfg = MISSING
     object_goal_tracking: RewardTermCfg = MISSING
     object_goal_tracking_fine_grained: RewardTermCfg = MISSING
@@ -313,11 +316,38 @@ class LiftObjectRewardCfg:
         self.reaching_object = RewardTermCfg(
             func=rewards.object_ee_distance,
             params={
-                "std": 0.1,
+                "std": 0.3,
                 "object_cfg": SceneEntityCfg(lift_object.name),
                 "ee_frame_cfg": SceneEntityCfg(ee_frame_name),
             },
             weight=1.0,
+        )
+        self.approach_above = RewardTermCfg(
+            func=lift_object_rewards.approach_ee_above_object,
+            params={
+                "std": 0.1,
+                "object_cfg": SceneEntityCfg(lift_object.name),
+                "ee_frame_cfg": SceneEntityCfg(ee_frame_name),
+            },
+            weight=3.0,
+        )
+        self.fingertips_grasp = RewardTermCfg(
+            func=lift_object_rewards.fingertips_close_to_object,
+            params={
+                "std": 0.06,
+                "object_cfg": SceneEntityCfg(lift_object.name),
+                "ee_frame_cfg": SceneEntityCfg(ee_frame_name),
+            },
+            weight=5.0,
+        )
+        self.close_gripper = RewardTermCfg(
+            func=lift_object_rewards.close_gripper_near_object,
+            params={
+                "std": 0.08,
+                "object_cfg": SceneEntityCfg(lift_object.name),
+                "ee_frame_cfg": SceneEntityCfg(ee_frame_name),
+            },
+            weight=10.0,
         )
         self.lifting_object = RewardTermCfg(
             func=lift_object_rewards.object_is_lifted,
