@@ -140,6 +140,8 @@ class LiftObjectTaskRL(LiftObjectTask):
         target_x_delta: tuple[float, float] = (-0.1, 0.1),
         target_y_delta: tuple[float, float] = (-0.25, 0.25),
         target_z_delta: tuple[float, float] = (0.2, 0.4),
+        gripper_joint_name: str | None = None,
+        gripper_close_pos: float = 0.7,
     ):
         """Initialize the Lift Object RL task.
 
@@ -202,6 +204,8 @@ class LiftObjectTaskRL(LiftObjectTask):
             minimum_height_to_lift=self.minimum_height_to_lift,
             robot_name=self.embodiment.get_embodiment_name_in_scene(),
             ee_frame_name=self.embodiment.get_ee_frame_name(self.embodiment.get_arm_mode()),
+            gripper_joint_name=gripper_joint_name,
+            gripper_close_pos=gripper_close_pos,
         )
 
         # Override termination config with RL training mode
@@ -312,7 +316,15 @@ class LiftObjectRewardCfg:
     object_goal_tracking: RewardTermCfg = MISSING
     object_goal_tracking_fine_grained: RewardTermCfg = MISSING
 
-    def __init__(self, lift_object: Asset, minimum_height_to_lift: float, robot_name: str, ee_frame_name: str):
+    def __init__(
+        self,
+        lift_object: Asset,
+        minimum_height_to_lift: float,
+        robot_name: str,
+        ee_frame_name: str,
+        gripper_joint_name: str | None = None,
+        gripper_close_pos: float = 0.7,
+    ):
         self.reaching_object = RewardTermCfg(
             func=rewards.object_ee_distance,
             params={
@@ -340,15 +352,28 @@ class LiftObjectRewardCfg:
             },
             weight=5.0,
         )
-        self.close_gripper = RewardTermCfg(
-            func=lift_object_rewards.close_gripper_near_object,
-            params={
-                "std": 0.08,
-                "object_cfg": SceneEntityCfg(lift_object.name),
-                "ee_frame_cfg": SceneEntityCfg(ee_frame_name),
-            },
-            weight=10.0,
-        )
+        if gripper_joint_name is not None:
+            self.close_gripper = RewardTermCfg(
+                func=lift_object_rewards.close_gripper_near_object,
+                params={
+                    "std": 0.06,
+                    "gripper_close_pos": gripper_close_pos,
+                    "robot_cfg": SceneEntityCfg(robot_name, joint_names=[gripper_joint_name]),
+                    "object_cfg": SceneEntityCfg(lift_object.name),
+                    "ee_frame_cfg": SceneEntityCfg(ee_frame_name),
+                },
+                weight=5.0,
+            )
+        else:
+            self.close_gripper = RewardTermCfg(
+                func=rewards.object_ee_distance,
+                params={
+                    "std": 1.0,
+                    "object_cfg": SceneEntityCfg(lift_object.name),
+                    "ee_frame_cfg": SceneEntityCfg(ee_frame_name),
+                },
+                weight=0.0,
+            )
         self.lifting_object = RewardTermCfg(
             func=lift_object_rewards.object_is_lifted,
             params={

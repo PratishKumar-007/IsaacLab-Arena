@@ -5,7 +5,7 @@
 
 import torch
 
-from isaaclab.assets import RigidObject
+from isaaclab.assets import Articulation, RigidObject
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import FrameTransformer
@@ -98,23 +98,39 @@ def fingertips_close_to_object(
 def close_gripper_near_object(
     env: ManagerBasedRLEnv,
     std: float,
+    gripper_close_pos: float,
+    robot_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     object_cfg: SceneEntityCfg = SceneEntityCfg("object"),
     ee_frame_cfg: SceneEntityCfg = SceneEntityCfg("ee_frame"),
 ) -> torch.Tensor:
-    """Reward for commanding the gripper to close when the EEF is near the object.
+    """Symmetric reward that teaches WHEN to open and WHEN to close.
 
-    Reads the raw gripper action (last dimension of the action buffer).
-    For BinaryJointPositionActionCfg: action > 0 means "close".
-    Combined with a tanh proximity kernel so the reward is only active near the object.
+    Product of two [-1, +1] signals:
+      proximity_signal: -1 (far from object) to +1 (fingertips touching object)
+      gripper_signal:   -1 (fully open) to +1 (fully closed)
+
+    Product truth table:
+      far  + open   = (-)(-)  = +1  (correct: approach with open gripper)
+      far  + closed = (-)(+)  = -1  (wrong: don't close before reaching)
+      near + open   = (+)(-)  = -1  (wrong: close when cube is between fingers)
+      near + closed = (+)(+)  = +1  (correct: grasp the cube)
     """
     obj: RigidObject = env.scene[object_cfg.name]
     ee_frame: FrameTransformer = env.scene[ee_frame_cfg.name]
+    robot: Articulation = env.scene[robot_cfg.name]
 
-    ee_pos = ee_frame.data.target_pos_w[..., 0, :]
-    distance = torch.norm(obj.data.root_pos_w - ee_pos, dim=1)
-    near_score = 1 - torch.tanh(distance / std)
+    obj_pos = obj.data.root_pos_w
+    right_finger_pos = ee_frame.data.target_pos_w[..., 1, :]
+    left_finger_pos = ee_frame.data.target_pos_w[..., 2, :]
 
-    gripper_action = env.action_manager.action[:, -1]
-    is_closing = (gripper_action > 0).float()
+    dist_right = torch.norm(obj_pos - right_finger_pos, dim=1)
+    dist_left = torch.norm(obj_pos - left_finger_pos, dim=1)
+    mean_fingertip_dist = (dist_right + dist_left) / 2.0
 
-    return near_score * is_closing
+    proximity_signal = 2.0 * (1.0 - torch.tanh(mean_fingertip_dist / std)) - 1.0
+
+    finger_pos = robot.data.joint_pos[:, robot_cfg.joint_ids].squeeze(-1)
+    gripper_normalized = torch.clamp(finger_pos / gripper_close_pos, 0.0, 1.0)
+    gripper_signal = 2.0 * gripper_normalized - 1.0
+
+    return proximity_signal * gripper_signal

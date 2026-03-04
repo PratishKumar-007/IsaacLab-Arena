@@ -14,7 +14,7 @@ import isaaclab.utils.math as PoseUtils
 from isaaclab.assets.articulation.articulation_cfg import ArticulationCfg
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import ManagerBasedRLMimicEnv
-from isaaclab.envs.mdp.actions.actions_cfg import BinaryJointPositionActionCfg, DifferentialInverseKinematicsActionCfg
+from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 from isaaclab.managers import ActionTermCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
@@ -33,6 +33,7 @@ from isaaclab_arena.embodiments.common.arm_mode import ArmMode
 from isaaclab_arena.embodiments.common.mimic_utils import get_rigid_and_articulated_object_poses
 from isaaclab_arena.embodiments.embodiment_base import EmbodimentBase
 from isaaclab_arena.embodiments.ur10e.observations import gripper_pos
+from isaaclab_arena.embodiments.ur10e.proximity_gripper import ProximityGripperActionCfg
 from isaaclab_arena.utils.pose import Pose
 
 # Default camera offset for a wrist-mounted camera on the UR10E + Robotiq gripper
@@ -180,11 +181,14 @@ class UR10eActionsCfg:
         body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=(0.0, 0.0, 0.24)),
     )
 
-    gripper_action: ActionTermCfg = BinaryJointPositionActionCfg(
+    gripper_action: ActionTermCfg = ProximityGripperActionCfg(
         asset_name="robot",
         joint_names=["finger_joint"],
         open_command_expr={"finger_joint": 0.0},
         close_command_expr={"finger_joint": 0.7},
+        object_name="dex_cube",
+        ee_frame_name="ee_frame",
+        close_threshold=0.015,
     )
 
 
